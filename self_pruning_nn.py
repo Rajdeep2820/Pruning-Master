@@ -38,33 +38,33 @@ print("Data loaders initialized from local storage.")
 class PrunableLinear(nn.Module):
     def __init__(self, in_features, out_features):
         super(PrunableLinear, self).__init__()
-        # 1. Standard weight and bias parameters [cite: 71]
+        # 1. Standard weight and bias parameters 
         self.weight = nn.Parameter(torch.Tensor(out_features, in_features))
         self.bias = nn.Parameter(torch.Tensor(out_features))
         
-        # 2. Gate scores: same shape as weights, registered as model parameter [cite: 72, 73, 74]
+        # 2. Gate scores: same shape as weights, registered as model parameter
         self.gate_scores = nn.Parameter(torch.Tensor(out_features, in_features))
         
         # Initialization
         nn.init.kaiming_uniform_(self.weight, a=np.sqrt(5))
         nn.init.zeros_(self.bias)
-        # Initialize gate_scores so gates start near 1.0 (active)
-        nn.init.constant_(self.gate_scores, 1.0) 
+        # Initialize gate_scores so gates start near 0.0 (active)
+        nn.init.constant_(self.gate_scores, 0.0) 
 
     def forward(self, x):
-        # 3. Transform gate_scores to gates between 0 and 1 using Sigmoid [cite: 77, 78]
+        # 3. Transform gate_scores to gates between 0 and 1 using Sigmoid
         gates = torch.sigmoid(self.gate_scores)
         
-        # 4. Calculate pruned weights via element-wise multiplication [cite: 79]
+        # 4. Calculate pruned weights via element-wise multiplication 
         pruned_weights = self.weight * gates
         
-        # 5. Standard linear operation using pruned_weights and bias [cite: 80, 81]
+        # 5. Standard linear operation using pruned_weights and bias 
         return F.linear(x, pruned_weights, self.bias)
         
 class SelfPruningNet(nn.Module):
     def __init__(self):
         super(SelfPruningNet, self).__init__()
-        # Defining three prunable layers [cite: 111]
+        # Defining three prunable layers 
         self.fc1 = PrunableLinear(3072, 512)
         self.fc2 = PrunableLinear(512, 256)
         self.fc3 = PrunableLinear(256, 10)
@@ -78,7 +78,7 @@ class SelfPruningNet(nn.Module):
         x = self.fc3(x)
         return x
 
-# --- PART 2: Sparsity Regularization Loss [cite: 83] ---
+# --- PART 2: Sparsity Regularization Loss
 def get_sparsity_loss(model):
     """Calculates the L1 norm of all gate values across all PrunableLinear layers."""
     sparsity_loss = 0
@@ -95,7 +95,7 @@ def train_and_evaluate(lambd, epochs=5):
     # Device selection (handles Apple Silicon/MPS, CUDA, or CPU)
     device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
     model = SelfPruningNet().to(device)
-    optimizer = optim.Adam(model.parameters(), lr=1e-3) # Standard optimizer [cite: 98]
+    optimizer = optim.Adam(model.parameters(), lr=1e-3) # Standard optimizer
     criterion = nn.CrossEntropyLoss()
 
     print(f"\nTraining with Lambda: {lambd}")
@@ -109,14 +109,14 @@ def train_and_evaluate(lambd, epochs=5):
             outputs = model(inputs)
             class_loss = criterion(outputs, labels)
             
-            # Total Loss = ClassificationLoss + Lambda * SparsityLoss [cite: 87]
+            # Total Loss = ClassificationLoss + Lambda * SparsityLoss
             s_loss = get_sparsity_loss(model)
             total_loss = class_loss + lambd * s_loss
             
             total_loss.backward()
             optimizer.step()
 
-    # Evaluation [cite: 99]
+    # Evaluation
     model.eval()
     correct = 0
     total = 0
@@ -147,11 +147,12 @@ def train_and_evaluate(lambd, epochs=5):
     
     return accuracy, sparsity_level, np.array(all_gates)
 
-# --- RUN EXPERIMENTS & REPORTING [cite: 104, 105, 116] ---
-
-lambdas = [1e-4, 5e-3, 1e-2] # Increased from your previous run
+# --- RUN EXPERIMENTS & REPORTING 
+lambdas = [0.001, 0.01, 0.05] # Increased from your previous run
 epochs = 10 # Recommended to allow sparsity to settle
 results = []
+best_gates = None
+best_acc = 0
 
 for l in lambdas:
     accuracy, sparsity, gates = train_and_evaluate(l, epochs=epochs)
@@ -160,6 +161,11 @@ for l in lambdas:
         "Test Accuracy": f"{accuracy:.2f}%",
         "Sparsity Level": f"{sparsity:.2f}%"
     })
+
+    # CRITICAL: Capture the gates from the best model for the plot
+    if accuracy > best_acc:
+        best_acc = accuracy
+        best_gates = gates
 
 # Print Summary Table [cite: 116]
 print("\n" + "="*50)
@@ -170,10 +176,11 @@ for res in results:
 print("="*50)
 
 # Generate Distribution Plot for the best model [cite: 117, 118]
-plt.figure(figsize=(10, 6))
-plt.hist(bins=50, color='skyblue', edgecolor='black')
-plt.xlabel("Gate Value (Sigmoid Output)")
-plt.ylabel("Frequency")
-plt.grid(axis='y', alpha=0.75)
-plt.savefig("gate_distribution.png")
-print("Report plot saved as 'gate_distribution.png'")
+if best_gates is not None:
+    plt.figure(figsize=(10, 6))
+    plt.hist(best_gates, bins=50, color='skyblue', edgecolor='black') # Added best_gates here
+    plt.title(f"Gate Value Distribution (Best Model Accuracy: {best_acc:.2f}%)")
+    plt.xlabel("Gate Value (Sigmoid Output)")
+    plt.ylabel("Frequency")
+    plt.grid(axis='y', alpha=0.75)
+    plt.savefig("gate_distribution.png")
