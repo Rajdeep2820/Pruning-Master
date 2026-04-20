@@ -153,7 +153,7 @@ def train_and_evaluate(lambd, epochs=5):
 
 
 # --- RUN EXPERIMENTS & REPORTING 
-lambdas = [0.001, 0.01, 0.02]
+lambdas = [0.005, 0.015, 0.025]
 epochs = 10
 results = []
 best_gates = None
