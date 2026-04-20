@@ -149,17 +149,17 @@ def train_and_evaluate(lambd, epochs=5):
 
 # --- RUN EXPERIMENTS & REPORTING [cite: 104, 105, 116] ---
 
-lambdas = [1e-5, 1e-4, 1e-3] # Low, Medium, High values [cite: 104]
+lambdas = [1e-4, 5e-3, 1e-2] # Increased from your previous run
+epochs = 10 # Recommended to allow sparsity to settle
 results = []
-best_gates = None
-best_acc = 0
 
 for l in lambdas:
-    acc, sparse, gates = train_and_evaluate(l)
-    results.append({"Lambda": l, "Test Accuracy": f"{acc:.2f}%", "Sparsity Level": f"{sparse:.2f}%"})
-    if acc > best_acc:
-        best_acc = acc
-        best_gates = gates
+    accuracy, sparsity, gates = train_and_evaluate(l, epochs=epochs)
+    results.append({
+        "Lambda": l,
+        "Test Accuracy": f"{accuracy:.2f}%",
+        "Sparsity Level": f"{sparsity:.2f}%"
+    })
 
 # Print Summary Table [cite: 116]
 print("\n" + "="*50)
@@ -171,8 +171,7 @@ print("="*50)
 
 # Generate Distribution Plot for the best model [cite: 117, 118]
 plt.figure(figsize=(10, 6))
-plt.hist(best_gates, bins=50, color='skyblue', edgecolor='black')
-plt.title(f"Gate Value Distribution (Best Model Accuracy: {best_acc:.2f}%)")
+plt.hist(bins=50, color='skyblue', edgecolor='black')
 plt.xlabel("Gate Value (Sigmoid Output)")
 plt.ylabel("Frequency")
 plt.grid(axis='y', alpha=0.75)
