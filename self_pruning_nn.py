@@ -7,6 +7,8 @@ import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 import numpy as np
 
+device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
+
 # Define how to process the images (Step 1 requirement)
 transform = transforms.Compose([
     transforms.ToTensor(),
@@ -35,6 +37,8 @@ testloader = torch.utils.data.DataLoader(testset, batch_size=64, shuffle=False)
 
 print("Data loaders initialized from local storage.")
 
+
+# Layer 1 : PrunableLinear
 class PrunableLinear(nn.Module):
     def __init__(self, in_features, out_features):
         super(PrunableLinear, self).__init__()
@@ -45,7 +49,6 @@ class PrunableLinear(nn.Module):
         # 2. Gate scores: same shape as weights, registered as model parameter
         self.gate_scores = nn.Parameter(torch.Tensor(out_features, in_features))
         
-        # Initialization
         nn.init.kaiming_uniform_(self.weight, a=np.sqrt(5))
         nn.init.zeros_(self.bias)
         # Initialize gate_scores so gates start near 0.0 (active)
@@ -78,22 +81,23 @@ class SelfPruningNet(nn.Module):
         x = self.fc3(x)
         return x
 
-# --- PART 2: Sparsity Regularization Loss
+
+
+# Layer 2: Sparsity Regularization Loss
 def get_sparsity_loss(model):
     """Calculates the L1 norm of all gate values across all PrunableLinear layers."""
     sparsity_loss = 0
     for module in model.modules():
         if isinstance(module, PrunableLinear):
-            # The case study requires L1 norm of the sigmoid gates [cite: 89, 90]
+            # L1 norm of the sigmoid gate
             gates = torch.sigmoid(module.gate_scores)
             sparsity_loss += torch.sum(gates)
     return sparsity_loss
 
-# --- PART 3: Training and Evaluation [cite: 94] ---
 
+
+# Layer 3: Training and Evaluation
 def train_and_evaluate(lambd, epochs=5):
-    # Device selection (handles Apple Silicon/MPS, CUDA, or CPU)
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
     model = SelfPruningNet().to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3) # Standard optimizer
     criterion = nn.CrossEntropyLoss()
@@ -109,7 +113,7 @@ def train_and_evaluate(lambd, epochs=5):
             outputs = model(inputs)
             class_loss = criterion(outputs, labels)
             
-            # Total Loss = ClassificationLoss + Lambda * SparsityLoss
+            # Total Loss = ClassificationLoss + ƛ * SparsityLoss
             s_loss = get_sparsity_loss(model)
             total_loss = class_loss + lambd * s_loss
             
@@ -147,9 +151,10 @@ def train_and_evaluate(lambd, epochs=5):
     
     return accuracy, sparsity_level, np.array(all_gates)
 
+
 # --- RUN EXPERIMENTS & REPORTING 
-lambdas = [0.001, 0.01, 0.05] # Increased from your previous run
-epochs = 10 # Recommended to allow sparsity to settle
+lambdas = [0.001, 0.01, 0.02]
+epochs = 10
 results = []
 best_gates = None
 best_acc = 0
@@ -162,12 +167,12 @@ for l in lambdas:
         "Sparsity Level": f"{sparsity:.2f}%"
     })
 
-    # CRITICAL: Capture the gates from the best model for the plot
+    # Capture the gates from the best model for the plot
     if accuracy > best_acc:
         best_acc = accuracy
         best_gates = gates
 
-# Print Summary Table [cite: 116]
+# Print Summary Table
 print("\n" + "="*50)
 print(f"{'Lambda':<10} | {'Test Accuracy':<15} | {'Sparsity Level':<15}")
 print("-" * 50)
@@ -175,7 +180,7 @@ for res in results:
     print(f"{res['Lambda']:<10} | {res['Test Accuracy']:<15} | {res['Sparsity Level']:<15}")
 print("="*50)
 
-# Generate Distribution Plot for the best model [cite: 117, 118]
+# Generate Distribution Plot for the best model
 if best_gates is not None:
     plt.figure(figsize=(10, 6))
     plt.hist(best_gates, bins=50, color='skyblue', edgecolor='black') # Added best_gates here
